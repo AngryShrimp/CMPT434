@@ -22,6 +22,8 @@ January 15th, 2016
 #define PORT "30434"
 
 #define BACKLOG 10
+#define DICTIONARY_SIZE 10
+#define DATA_SIZE 512
 
 typedef struct keyedPair_t
 {
@@ -29,9 +31,9 @@ typedef struct keyedPair_t
 	char value[201];
 } keyedPair;
 
-keyedPair keyedDictionary[100];
+keyedPair keyedDictionary[DICTIONARY_SIZE];
 
-
+/*From Beej*/
 void sigchld_handler(int s)
 {
     /* waitpid() might overwrite errno, so we save and restore it: */
@@ -42,7 +44,7 @@ void sigchld_handler(int s)
     errno = saved_errno;
 }
 
-
+/*From Beej*/
 /* get sockaddr, IPv4 or IPv6: */
 void *get_in_addr(struct sockaddr *sa)
 {
@@ -52,6 +54,29 @@ void *get_in_addr(struct sockaddr *sa)
 
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
+
+/*
+Functions for the easy sending and recieving of file descriptors
+*/
+int sendMsg(int fd, char* s)
+{
+	int numBytes;
+	if((numBytes = send(fd, s, strlen(s), 0)) == -1)
+	{
+		perror("error in sending.\n");
+		return -1;
+	}
+	return 0;
+}
+
+char* recvMsg(int fd, char* buffer)
+{
+	int numBytes = 0;
+	if((numBytes = recv(fd, buffer, DATA_SIZE, 0)) == -1)
+		perror("error in recv.\n");
+	return buffer;
+}
+
 
 /*
 Function add
@@ -65,9 +90,26 @@ returns:	0 		-On success
 			-1 		-On failure
 
 */
-int add(char key[11], char value[201])
+int add(char* key, char* value)
 {
-	return 0;
+	int i;
+	char* searchKey;
+	searchKey = strtok(key, " ");
+
+	/*printf("SKey:%s:\n", searchKey);*/
+	/*Loop through all keyed pairs looking for the first empty spot*/
+	for(i = 0; i < DICTIONARY_SIZE; i++)
+	{
+		if(keyedDictionary[i].key[0] == '\0')
+		{
+			/*Need Str cpy other methods caused fun issues*/
+			strcpy(keyedDictionary[i].key, searchKey);
+			strcpy(keyedDictionary[i].value, value);
+			return 0;
+		}
+	}
+	/*REsults in a failure if this is reached, its full*/
+	return -1;
 }
 
 
@@ -81,20 +123,45 @@ inputs:		key 	-The key to be searched  for in the dictionary
 returns 	The value associated with the key
 
 */
-char* getValue(char key[11])
+char* getValue(char* key)
 {
+	int i;
+	/*Loop through all pairs until a match is found*/
+	for(i = 0; i < DICTIONARY_SIZE; i++)
+	{
+		if(strcmp(keyedDictionary[i].key, key) == 0)
+		{
+			/*MATCH*/
+			return keyedDictionary[i].value;
+		}
+	}
 	return NULL;
 }
 
 /*
 Function getAll
 
+inputs:		fd  	-A file descriptor 
+
 returns 	-the entire dictionary of keyed values, in a human readabvle format.
 */
 
-keyedPair* getAll()
+void getAll(int fd)
 {
-	return keyedDictionary;
+	int i;
+	/*loop through all and return*/
+	sendMsg(fd, "KEY\tVALUE\n=================\n");
+	for(i = 0; i < DICTIONARY_SIZE; i++)
+	{
+		if(strcmp(keyedDictionary[i].key, "\0"))
+		{
+			sendMsg(fd, keyedDictionary[i].key);
+			sendMsg(fd, "\t");
+			sendMsg(fd, keyedDictionary[i].value);
+			sendMsg(fd, "\n");
+		}
+	}
+	return;
 }
 
 /*
@@ -103,13 +170,27 @@ Function remove
 inputs 		-key 	-The ke for the value to be removed 
 
 returns 	0 		if successful
-			1 		if no key matching
 			-1 		if failure
 */
 
-int removeValue(char key[11])
+int removeValue(char* key)
 {
-	return 0;
+	int i;
+	
+	/*loop through all looking for key, then set to tombstone*/
+	for(i = 0; i < DICTIONARY_SIZE; i++)
+	{
+		/*printf("MKey:%s:\n", keyedDictionary[i].key);*/
+		if(strcmp(keyedDictionary[i].key, key) == 0)
+		{
+			/*MATCH*/
+			/*printf("%s\n", "MATCH");*/
+			keyedDictionary[i].key[0] = '\0';
+			keyedDictionary[i].value[0] = '\0';
+			return 0;
+		}
+	}
+	return -1;
 }
 
 /*
@@ -130,10 +211,26 @@ int main(void)
     char s[INET6_ADDRSTRLEN];
     int rv;
 
+	char* token;
+	char buffer[200];
+	/*Need a 'clone' of the buffer to mess around with, best not mess with the original buffer*/
+	char bufferDup[200];
+	char* tempKey;
+	char* tempValue;
+	char* tempGet;
+	int i;
+
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE; /* use my IP */
+
+    /*Init keyed dictionary to all tombstones, A cemetary, if you will*/
+    for(i = 0; i < DICTIONARY_SIZE; i++)
+    {
+    	keyedDictionary[i].key[0] = '\0';
+    	keyedDictionary[i].value[0] = '\0';
+    }
 
     if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
@@ -185,7 +282,9 @@ int main(void)
 
     printf("server: waiting for connections...\n");
 
-    while(1) {  /* main accept() loop */
+    while(1) 
+    {  
+    	/* main accept() loop */
         sin_size = sizeof their_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
         if (new_fd == -1) {
@@ -198,13 +297,102 @@ int main(void)
             s, sizeof s);
         printf("server: got connection from %s\n", s);
 
-        if (!fork()) { /* this is the child process */
-            close(sockfd); /* child doesn't need the listener */
-			/*HAVE TO DO SWITCH STATEMENTS HERE*/
-            exit(0);
-        }
-        close(new_fd);  /* parent doesn't need this */
-    }
+        sendMsg(new_fd, "\nConnected to the Keyed Dictionary Service.\nUse the help command for more information.\n\n:~>");
+        recvMsg(new_fd, buffer);
+        strcpy(bufferDup, buffer);
 
+		
+        /*Toeknize commands*/
+        token = strtok(bufferDup, " ");
+        /*Remove Newline*/
+		token = strtok(token, "\n");
+
+        /*printf("%s\n", token);*/
+
+		if(strcmp(token, "add") == 0)
+		{
+			/*Add stuff*/
+			/*tokenize the input*/
+			strcpy(bufferDup, buffer);
+			token = strtok(bufferDup, " ");
+			token = strtok(NULL, " ");
+			tempKey = strtok(token, " ");
+			/*Copy the original buffer again*/
+			strcpy(bufferDup, buffer);
+			token = strtok(bufferDup, "\"");
+			token = strtok(NULL, "\"");
+			tempValue = token;
+			if(token == NULL)
+			{
+				sendMsg(new_fd, "Failed to Add, Check Syntaxing.\n");
+			}
+			else if(add(tempKey, tempValue) == -1)
+			{
+				sendMsg(new_fd, "Failed to add to Dictionary, full.\n");
+			}
+			else
+			{
+				sendMsg(new_fd, "Successfully Added!\n");
+			}
+
+		}
+		else if(strcmp(token, "remove") == 0)
+		{
+			/*remove stuff*/
+			strcpy(bufferDup, buffer);
+			token = strtok(bufferDup, " ");
+			token = strtok(NULL, "\n");
+			/*printf("%s\n", token);*/
+			tempKey = token;
+			if(removeValue(tempKey) == -1)
+			{
+				sendMsg(new_fd, "ERROR: Key not found!\n");
+			}
+			else
+			{
+				sendMsg(new_fd, "Successfully Removed!\n");
+			}
+		}
+		else if(strcmp(token, "getAll") == 0)
+		{
+			/*get ALL the stuff*/
+			getAll(new_fd);
+		}
+		else if(strcmp(token, "get") == 0)
+		{
+			/*get stuff*/
+			strcpy(bufferDup, buffer);
+			token = strtok(bufferDup, " ");
+			token = strtok(NULL, "\n");
+			tempKey = token;
+
+			if((tempGet = getValue(tempKey)) == NULL)
+			{
+				sendMsg(new_fd, "ERROR: Key not found!\n");
+			}
+			else
+			{
+				sendMsg(new_fd, "The Value stored for key ");
+				sendMsg(new_fd, tempKey);
+				sendMsg(new_fd, " is: ");
+				sendMsg(new_fd, tempGet);
+				sendMsg(new_fd, "\n");
+			}
+
+		}
+		else if(strcmp(token, "help") == 0)
+		{
+			/*help stuff*/
+			sendMsg(new_fd, "HELP\nCommand\tSyntax\t\tDescription\nadd\t[Key] \"[Value]\" Add the key to the dictionary with the given value\nremove\t[key]\t\tRemoves the value with the given key from the dictionary\nget\t[key]\t\tRetrieves the value with the matching Key\ngetAll\tnone\t\tRetrieves all keys and values\n");
+		}
+		else
+		{
+			sendMsg(new_fd, "ERROR: Invalid Command/Syntax, please use \"help\" for commands.\n");
+		}
+		/*Clean up*/
+		memset(buffer, 0, sizeof buffer);
+		memset(bufferDup, 0, sizeof bufferDup);
+        close(new_fd);
+    }
     return 0;
 }

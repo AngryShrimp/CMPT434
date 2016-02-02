@@ -1,14 +1,14 @@
 
 CC=gcc
 
-CFLAGS=-Wall -g -pedantic -Werror
+CFLAGS=-Wall -g -pedantic 
 
-all: Server
+all: TCPServer
 
-server: Server.c
-	$(CC) $(CFLAGS) Server.c -o Server
+TCPServer: TCPServer.c
+	$(CC) $(CFLAGS) TCPServer.c -o TCPServer
 
 #Cleanup.
 clean:
-	rm -f *.o Server
+	rm -f *.o TCPServer
 	
