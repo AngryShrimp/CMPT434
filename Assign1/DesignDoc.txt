@@ -1,0 +1,40 @@
+/***
+Keenan Johnstone - 11119412 - kbj182
+
+Februrary 3rd, 2016
+**/
+
+TCPServer:
+	-SendMsg and RecvMsg were created to make the sending and recieving of messages.
+	-The 'dictionary' that was used is an array of keyed pairs
+	-The commands activate the appropriate functions
+		+commands are: 	add [key] "[value]"
+						get [key]
+						remove [key]
+						getAll
+						help
+
+TCPProxy
+	-SendMsg and RecvMsg were created to make the sending and recieving of messages.
+	-Handler was created to help with memsetting the the buffer to keep it clear, had
+	 issues when it wasnt in a handler
+	-The commands activate the appropriate functions
+		+commands are: 	add [key] "[value]"
+						get [key]
+						remove [key]
+						getAll
+						help
+						
+UDPServer
+	-SendMsg was created to make the sending and recieving of messages.
+	-The 'dictionary' that was used is an array of keyed pairs
+	-The commands activate the appropriate functions
+		+commands are: 	add [key] "[value]"
+						get [key]
+						remove [key]
+						getAll
+						help
+						
+UDPProxy
+	-Ran out of time, just miscalculated how long it would take to finish the assignment 
+	 with oither class assignments

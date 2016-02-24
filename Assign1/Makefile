@@ -1,7 +1,7 @@
 
 CC=gcc
 
-CFLAGS=-Wall -g -pedantic 
+CFLAGS=-Wall -g -pedantic -Wall
 
 all: TCPServer TCPProxy UDPServer
 
@@ -11,12 +11,17 @@ TCPServer: TCPServer.c
 TCPProxy: TCPProxy.c
 	$(CC) $(CFLAGS) TCPProxy.c -o TCPProxy
 
-#UDPServer: UDPServer.c
-#	$(CC) $(CFLAGS) UDPServer.c -o UDPServer
+UDPServer: UDPServer.c
+	$(CC) $(CFLAGS) UDPServer.c -o UDPServer
+
+#UDPProxy: UDPProxy.c
+#	$(CC) $(CFLAGS) UDPProxy.c -o UDPProxy
+	
 
 #Cleanup.
 clean:
 	rm -f *.o TCPServer
 	rm -f *.o TCPProxy
 	rm -f *.o UDPServer
+#	rm -f *.o UDPProxy
 	
