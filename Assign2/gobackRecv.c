@@ -21,33 +21,53 @@ TODO:
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <stdbool.h>
+#include <time.h>
 
 #define PORT "30434"
 
 #define MAX_SEND_DATA 200
+#define MAX_MESSAGE_LENGTH 128
+#define MAX_PACKETS 100
 
-/*From Beej*/
-/* get sockaddr, IPv4 or IPv6: */
-void *get_in_addr(struct sockaddr *sa)
+
+typedef struct _PACKET_
 {
-    if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
+    int packetNumber;
+    char message[MAX_MESSAGE_LENGTH];
+    bool ack;
+} packet;
 
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
+packet packetArray[MAX_PACKETS];
+bool packetAck[MAX_PACKETS];
 
 /*
-Functions for the easy sending and recieving of file descriptors
+Function isRandomError
+
+inputs 		p 			the probability that there is an error
+						set to 0 for no errors
+						set to negative numbers or greater than or equal to 100 for always errors
+
+returns 	false 		if no error
+			true 		if there is an error
 */
-int sendMsg(int fd, char s[MAX_SEND_DATA], struct sockaddr_storage addr, socklen_t addr_len)
+bool isRandomError(int p)
 {
-	if (sendto(fd, s, strlen(s), 0, (struct sockaddr *)&addr, addr_len) == -1) {
-		perror("send");
-		return -1;
-	}
-	return 0;
+	int r;
+
+	if(p == 0)
+		return false;
+	if(p >= 100 || p < 0)
+		return true;
+
+	r = rand() % 100;
+	/*Error*/
+	if(r <= p)
+		return true;
+	else
+		return false;
 }
+
 /*
 main:
 
@@ -55,23 +75,38 @@ Runs the server. Taken from: http://beej.us/guide/bgnet/output/html/singlepage/b
 
 returns	 	EXIT_FAILURE on failure
 */
-int main(void)
+int main(int argc, char *argv[])
 {
     int sockfd;
     struct addrinfo hints, *servinfo, *p;
     int rv;
     int numbytes;
+    int errorProbability;
+	size_t size;
+    char *response;
+    packet currentPacket;
     struct sockaddr_storage addr;
     socklen_t addr_len;
-    char s[INET6_ADDRSTRLEN];
-    char buffer[MAX_SEND_DATA];
-    char bufferDup[MAX_SEND_DATA];
+    int i;
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC; /* set to AF_INET to force IPv4 */
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE; /* use my IP */
     numbytes = 0;
+	response = malloc(sizeof(char*));
+
+	if (argc != 2) {
+        fprintf(stderr,"Incorrect Usage, use: gobackRecv error_probability\n");
+        exit(1);
+    }
+
+    errorProbability = atoi(argv[1]);
+
+    for (i = 0; i < MAX_PACKETS; i++)
+    {
+        packetAck[i] = false;
+    }
 
 	/*From Beej*/
     if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
@@ -82,13 +117,13 @@ int main(void)
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) {
-            perror("listener: socket");
+            perror("Sender: socket");
             continue;
         }
 
         if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(sockfd);
-            perror("listener: bind");
+            perror("Sender: bind");
             continue;
         }
 
@@ -96,16 +131,76 @@ int main(void)
     }
 
     if (p == NULL) {
-        fprintf(stderr, "listener: failed to bind socket\n");
+        fprintf(stderr, "Sender: failed to bind socket\n");
         return 2;
     }
 
+    /*TODO: Get messages from sender, read out in order*/
+
+    /*TODO: Let user inject errors at will*/
+
     freeaddrinfo(servinfo);
 
-    printf("listener: waiting to recvfrom...\n");
+    printf("Recv: waiting to recvfrom...\n");
     while(1)
     {
-        /*Go Back and Slide shit here*/
+    	addr_len = sizeof addr;
+        if ((numbytes = recvfrom(sockfd, (char*)&currentPacket, sizeof(currentPacket), 0,(struct sockaddr *)&addr, &addr_len)) == -1) 
+        {
+        	perror("revfrom");
+        	exit(1);
+        }
+        if(packetAck[currentPacket.packetNumber] == true)
+        {
+        	printf("Already Recieved Message:\n");
+        	printf("---------------------------\n");
+        	printf("#%d\t%sAck:%d\n", currentPacket.packetNumber, currentPacket.message, currentPacket.ack);
+        	printf("---------------------------\n");
+        	printf("Still good? (Y/N): ");
+        }
+        else
+        {
+        	printf("Message Recieved!\n");
+        	printf("---------------------------\n");
+        	printf("#%d\t%sAck:%d\n", currentPacket.packetNumber, currentPacket.message, currentPacket.ack);
+        	printf("---------------------------\n");
+        	printf("Was this recieved Correctly? (Y/N): ");
+        }
+        getline(&response, &size, stdin);
+
+        if(response[0] == 'Y' || response[0] == 'y')
+        {
+        	/*If there is a randomm error*/
+        	if(isRandomError(errorProbability) == true)
+        	{
+        		currentPacket.ack = false;
+        		printf("====================\n");
+        		printf("ERROR IN SENDING ACK\n");
+	      		printf("====================\n");
+        	}
+        	/*Successfully sent ack*/
+        	else
+        	{
+        		packetAck[currentPacket.packetNumber] = true;
+        		currentPacket.ack = true;
+        	}
+
+        }
+        else if(response[0] == 'N' || response[0] == 'n')
+        {
+        	currentPacket.ack = false;
+        }
+        else
+        {
+        	printf("Invalid Response, treating as a No.\n");
+        	currentPacket.ack = false;
+        }
+
+        if((numbytes = sendto(sockfd, (char*)&currentPacket, sizeof(currentPacket), 0, (struct sockaddr*)&addr, addr_len) == -1))
+        {
+        	perror("sendto");
+        	exit(1);
+        }  
     }
     close(sockfd);
     return 0;
