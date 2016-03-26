@@ -1,0 +1,138 @@
+/***
+DesignDoc.txt
+Keenan Johnstone - 11119412 - kbj182
+
+March 2nd, 2016
+**/
+
+The following is a summation of the choices made in design and how the files actually work in point form.
+
+Part A
+******
+
+General
+-------
+Both files follow Beej's Network guide for inital setup (binding, etc.)
+Both files have these.
+Packet structure was created:
+	-Three fields:
+		-packetNumber: 	for keeping track of what message in the sequence this is
+		-message:		The message being sent, user defined
+		-ack 			whether or not the reciever acknowledged the packet
+
+Three Global variables are used too.
+	-packetArray[]		for containing the messages
+	-packetAck[]		for keeping track of what the sender has sent/recieved (from the sender or reciever)
+	-packetOffset		for keeping track of what messages have been created (ie what packet we are on when creating messages). Reciever doesnt have this variable.		
+
+Sender
+------
+
+Main()
+======
+	-The go back and slide sender starts by checking that there are enough messages
+		=If there arent we call the getMessages() function to get more messages from the user
+	-Next we check if we have ebough messages to fill up a window.
+		=If we do, we iterate throught the messages sending them in their own packet.
+		=Otherwise we only send what messages we have
+			+So if we only have 2 messages for a window size of 3, we will only send 2 messages
+		=If we have NO messages, call getMessages() to get more.
+	-After we send each message we wait for the specified timeout (by the user) period.
+		=If it timesout, we treat it as though we didn't get acknowleedgement
+		=If acknowledgement is recieved:
+			+Check that the server did acknowledge it/the packet was corrupt
+			+Check that the ack isn't out of order
+****			>If it is, sent an out of order message to the sender and resend and wait
+				for the reciever to send back and ok that it is sync ed back up. Basically wait for the reciever to 'catch' up. 
+			+Then store the ack result in our array of Acks
+	-Once the whole window is sent:
+		=Check that the window is ok by iterating through our array of packet acks
+			+if everything is ok, incriment the starting position of the window by the window size
+			+other wise try RESENDING THE WHOLE WINDOW (and reset our acks for the window)
+
+getMessages() 
+=============
+	-gets messages from the user
+
+	-starts by asking how many messages the user wants to create at a single time. This makes testing easy by allowing the user to enter a decent number of messages before it begins sending.
+	-Then  begin creating and storing the packetsin the packetArray.
+		=set packetNumber equal to the message number for simplicity's sake.
+		=set message to what the user defined
+		=set ack to false as it hasn't been acked yet.
+	-incriment the packet offset to what the last message number was. This is to keep track of what message we are on.
+
+**** Unimplemented due to time constraints. 
+
+What needs to be be done and how
+================================
+-Send a message back to the recv with the out of order message. This can be done by sending a message with some sort of error code (probably a negative number) telling the recv to clear the 'backlog' of un-acked messages
+-Currently the only way to re-sync the sender and reciever is to wait for the sender to send the packet that the recver is waiting for the user to ack.
+
+-Another fix is to get the reciever to time out when the user doesnt input anything and send back that the packet was un-acked. This fix is a bit less secure however.
+
+Reciever
+--------
+
+main()
+======
+-Wait to recvfrom the sender
+	=If packet recieved was already recieved, check that it is still good.
+		+This is could also simply ignore the user and print that we've already got the packet and move onto the next packet (after sending it's ack back) but I wanted the user to have control here on whether the packet is "still good"
+	=Else print the packet and ask the user if it was recieved correctly
+		-If it was
+			+Check if there is a 'random Error' using the isRandomError() function which takes the error probabilty defined by the user on launch.
+			-if there was no random error, set the ack field of the packet to true and send it back
+		-If it wasnt
+			+Set the ack field of the packet to false and send it back
+****+If an out of order message appears, reset to the last acked packet
+
+isRandomError()
+===============
+-Takes an input that was taken from the user on launch and randomly generates a number that will generate an error. 
+-Returns True if there is an error
+-Returns false if there is no error.
+
+**** Unimplemented due to time constraints. 
+
+What needs to be be done and how
+================================
+
+-Fix the out of sync problem where is sends the wrong ack for what is being asked.
+
+There are two ways to fix this, get it to watch for error messages and clean up if there is one.
+
+Or using poll(), watch for activity from the sender and if another packet comes in while waiting for the user to acknowledge packets sned back the packet as unacknowledged. This could cause some other problems though. The first solution seems easier to fix.
+
+
+
+Part B
+******
+
+Part B is almost identical expect for a few key changes listed below.
+I was unable to complete Part B due to time constraints. it is functionally similar to part A in its current state.
+
+Reciver
+------
+
+main()
+======
+-The big change is when we now have a reciever buffer size (rmax)
+	=The buffer is used as follows:
+		+Say we have a window size of 5, so messages 0,1,2,3 and 4 are sent, and rmax is 3
+		+0 is acked
+		+1 is not, it is then stored in the buffer
+		+2 is acked, but still stored because of the un-acked packet 1
+		+3 is also acked and stored, buffer is now full
+		+4 is returned as out of order and the sender now needs to resend what was stored in the buffer.
+
+		Buffer is cleared once messages are sent back
+
+
+SEnder
+------
+
+Main()
+======
+-When an out of order message is recieved along with waht messages are in the buffer the sender resends those messages (so in the abopve example packets 1 to 3) and then continues with the window, so packet 4 would be sent after as well.
+
+Then it proceeds until another out of sync error is found or it runs out of messages

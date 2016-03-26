@@ -1,0 +1,94 @@
+/****************
+Keenan Johnstone
+11119412 - kbj182
+Mar 30 2016
+Assignment 3
+****************/
+
+DESIGN DOCUMENT
+
+General Stuff
+-------------
+-Will use an arracy of Strings as the map of the 'zone'
+	-Each entry will either be
+		-Empty means nothing is there
+		-The nodeID (eg N00, N01... up to NP) as a string.
+-Will use a single file format and the fork() function
+	-Parent will be the stationary node
+	-Children will be animals
+-TCP for simplicity
+-Command Line arguments:
+	-K: 	The number of Simulated Time steps
+	-D: 	Distance an animal moves on each time step
+	-R:		Transmission range of the 'base'
+	-P: 	Number of Sensor nodes (examples assume 10)
+
+
+
+mobileSensor.c
+--------------
+Description
+-----------
+The plan is to use fork to create children nodes that will act as the 'animals' being tracked by the parent or the 'base'. To do this we will have to create a giant 'web' of TCP connections between Every node.
+
+So if we have 10 (P=10) animal nodes, we need 11 process, 1 for the base and 10 for the mobile nodes. Then each of the 11 processes needs a connection each other process meaning that we will need a total of 110 connections when P=10. This will be the biggest challenge to implement as creating this 'web' will be no easy task and is the hardest part of the design.
+
+The other features are much simpler to implement. 
+
+To create our 11 processes we will fork our parent process 10 times giving us a total of 11 processes. Each child process will bind to its socket then connect to each other node in the system. By doing this for each process we will create the required web of connections to pass information around. 
+NOTE: we can't use the the same connection twice. For example when N06 sends to N07 we cant use the same connection to send from N07 to N06 it needs its own unique connection, as this can result in deadlock and crash the system.
+
+For the animals there will be a structure containing the following information:
+	-X and Y coordinates as an integer
+	-nodeID as a string
+
+For the movement of the 'animals' there will be a function to help with this that will take the given animal node's location and move it a user defined distance D. Because we are using an array as our map or direction of movement is rather limited. To make things easier we will limit movement to up, down, left and right and diagonally.
+Using an array to make the displaying of the information much easier to read for the user.
+
+For the placement of the nodes there will also be a helper function for that which will take the node and place it 
+
+Pseudo Code
+-----------
+
+main
+----
+socket 
+bind 
+listen 
+fork DO NOT WAIT
+	Child:	<- the children forks are the nodes being tracked
+		create P+1 global sockets
+		close other sockets that we arent using
+		create P+1 local sockets so each node will connect to each other node
+		coneect local sockets to gloabl sockets
+		place each node in the 'zone' to be tracked
+		begin loop that reapeats K times:
+			move node D distance in a random direction
+			if the edge of the zone is hit 'bounce' off of it so that the distance D is still covered
+				-Do this by inverting the direction, not true reflection. But it will suit our needs.
+			Send message to each other process that the node is connected to
+				-Send position and nodeID
+
+			for each other process P
+				recieve message from P
+				if within transmission range R
+					send message to P with the number of data packets that will be sent to P
+					if P is the stationary node (ie base) send all buffered packets
+				else
+					policy dependant
+					send P one or more data packets
+						-Must obey the constraint that to conserve power each node can send to other nodes that only P data packets in total
+					recieve message from P with the number of data packets being sent
+					recieve data packets from P and add them to the buffer.
+
+
+
+	parent:	
+		place the stationary node in the 'zone'
+		for each other process P 
+			recieve message from P
+			if in range R
+				send nodeID <- This will tell the other nodes that this is the 'base'
+				recieve from P the buffer that the node was storing
+
+

@@ -46,7 +46,7 @@ void getMessages()
     char* m;
     size_t size;
     m = malloc(sizeof(char*));
-    printf("How many messages would you like to enter? (NOTE: max is: %d)\n", MAX_PACKETS);
+    printf("How many messages would you like to enter? (NOTE: max is %d): ", MAX_PACKETS);
     getline(&m, &size, stdin);
     numMessages = atoi(m);
     printf("Please Enter messages %d to %d, no longer than %d and seperated by newlines.\n", packetOffset, (packetOffset + numMessages - 1), MAX_MESSAGE_LENGTH);
@@ -54,7 +54,7 @@ void getMessages()
     {
         if(i >= MAX_PACKETS)
         {
-            printf("MAX MESSAGES REACKED\n");
+            printf("MAX MESSAGES REACHED\n");
             break;
         }
         printf("Message #%d: ", i);
@@ -195,6 +195,14 @@ int main(int argc, char *argv[])
                 {
                     perror("revfrom");
                     exit(1);
+                }
+                if(currentPacket.packetNumber != i)
+                {
+                    printf("***********************\n");
+                    printf("* ERROR: OUT OF ORDER *\n");
+                    printf("* Got: %d Expected: %d *\n", currentPacket.packetNumber, i);
+                    printf("***********************\n");
+                    /*break;*/
                 }
                 printf("---------------------------\n");
                 printf("#%d\t %sAck:%d\n", currentPacket.packetNumber, currentPacket.message, currentPacket.ack);
