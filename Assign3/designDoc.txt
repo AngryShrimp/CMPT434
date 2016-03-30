@@ -21,11 +21,14 @@ General Stuff
 	-K: 	The number of Simulated Time steps
 	-D: 	Distance an animal moves on each time step
 	-R:		Transmission range of the 'base'
+-Hard coded number definitions
 	-P: 	Number of Sensor nodes (examples assume 10)
+			I struggled to find a way to make this dynamic as my node structure 
+			needed to know how many other nodes it needed to connect too.
 
 
 
-mobileSensor.c
+mobile_sensor.c
 --------------
 Description
 -----------
@@ -55,7 +58,7 @@ main
 socket 
 bind 
 listen 
-fork DO NOT WAIT
+fork 
 	Child:	<- the children forks are the nodes being tracked
 		create P+1 global sockets
 		close other sockets that we arent using
